@@ -210,6 +210,10 @@ for opt do
   ;;
   --disable-rbd) disable_rbd="yes"
   ;;
+  --disable-pfs) disable_pfs="yes"
+  ;;
+  --disable-nebd) disable_nebd="yes"
+  ;;
   --disable-http) disable_http="yes"
   ;;
   --disable-gfapi) disable_gfapi="yes"
@@ -273,6 +277,8 @@ if test "$show_help" = "yes" ; then
   echo "--disable-rdma          Disable RDMA support even if found"
   echo "--disable-rados         Disable Rados support even if found"
   echo "--disable-rbd           Disable Rados Block Device even if found"
+  echo "--disable-pfs           Disable PolarFS even if found"
+  echo "--disable-nebd          Disable Curve NEBD even if found"
   echo "--disable-http          Disable HTTP support even if found"
   echo "--disable-nfs           Disable userspace NFS support even if found"
   echo "--disable-gfapi         Disable gfapi"
@@ -1940,6 +1946,58 @@ print_config "rbd_invalidate_cache" "$rbd_inval"
 fi
 
 ##########################################
+# check for pfs
+if test "$pfs" != "yes" ; then
+  pfs="no"
+fi
+cat > $TMPC << EOF
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <pfsd_sdk.h>
+
+int main(int argc, char **argv)
+{
+  pfsd_mount("curve", "pool@@pfstest_test_", 1, PFS_RDWR);
+
+  return 0;
+}
+EOF
+pfs_path="/usr/local/polarstore/pfsd"
+libpfs_cflags="-I$pfs_path/include"
+libpfs_ldflags="-L$pfs_path/lib"
+libpfs_libs="-lpfsd -lm -lpthread"
+if test "$disable_pfs" != "yes"  && compile_prog "$libpfs_cflags" "$libpfs_ldflags $libpfs_libs" ; then
+  pfs="yes"
+fi
+print_config "PFS engine" "$pfs"
+
+##########################################
+# check for nebd
+if test "$nebd" != "yes" ; then
+  nebd="no"
+fi
+cat > $TMPC << EOF
+#include <nebd/libnebd.h>
+
+int main(int argc, char **argv)
+{
+  nebd_lib_init();
+  return 0;
+}
+EOF
+libnebd_cflags=""
+libnebd_ldflags="-L/usr/lib/nebd -Wl,-rpath=/usr/lib/nebd"
+libnebd_libs="-lnebdclient -lnebd_common -lclient_proto -lbrpc -lcc_brpc_internal_proto -lcc_brpc_idl_options_proto\
+ -ljson -lbthread -lbvar -lmcpack2pb -ljson2pb -lbutil -lprotobuf -lprotobuf_lite -lleveldb -lglog -lgflags"
+
+if test "$disable_nebd" != "yes"  && compile_prog "$libnebd_cflags" "$libnebd_ldflags $libnebd_libs" ; then
+  nebd="yes"
+fi
+print_config "NEBD engine" "$nebd"
+
+
+##########################################
 # Check whether we have setvbuf
 if test "$setvbuf" != "yes" ; then
   setvbuf="no"
@@ -3174,6 +3232,18 @@ if test "$dynamic_engines" = "yes" ; then
 fi
 if test "$pdb" = yes; then
   output_sym "CONFIG_PDB"
+fi
+if test "$pfs" = yes; then
+  output_sym "CONFIG_PFS"
+  echo "LIBPFS_CFLAGS=$libpfs_cflags" >> $config_host_mak
+  echo "LIBPFS_LDLAGS=$libpfs_ldflags" >> $config_host_mak
+  echo "LIBPFS_LIBS=$libpfs_libs" >> $config_host_mak
+fi
+if test "$nebd" = yes; then
+  output_sym "CONFIG_NEBD"
+  echo "LIBNEBD_CFLAGS=$libnebd_cflags" >> $config_host_mak
+  echo "LIBNEBD_LDLAGS=$libnebd_ldflags" >> $config_host_mak
+  echo "LIBNEBD_LIBS=$libnebd_libs" >> $config_host_mak
 fi
 
 print_config "Lib-based ioengines dynamic" "$dynamic_engines"

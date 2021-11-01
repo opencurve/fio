@@ -2023,6 +2023,12 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 			    .help = "NFS IO engine",
 			  },
 #endif
+			  { .ival = "pfs",
+			    .help = "pfs IO engine",
+			  },
+			  { .ival = "nebd",
+			    .help = "nebd IO engine",
+			  },
 		},
 	},
 	{

@@ -153,6 +153,19 @@ ifdef CONFIG_RBD
   rbd_LIBS = -lrbd -lrados
   ENGINES += rbd
 endif
+ifdef CONFIG_PFS
+  pfs_SRCS = engines/pfs.c
+  pfs_CFLAGS = ${LIBPFS_CFLAGS}
+  pfs_LIBS= $(LIBPFS_LDLAGS) ${LIBPFS_LIBS}
+  ENGINES += pfs
+endif
+ifdef CONFIG_NEBD
+  nebd_SRCS = engines/nebd.c
+  nebd_CFLAGS = ${LIBNEBD_CFLAGS}
+  nebd_LIBS = ${LIBNEBD_LDLAGS} ${LIBNEBD_LIBS}
+  ENGINES += nebd
+endif
+
 ifdef CONFIG_HTTP
   http_SRCS = engines/http.c
   http_LIBS = -lcurl -lssl -lcrypto
@@ -163,6 +176,7 @@ ifdef CONFIG_DFS
   dfs_LIBS = -luuid -ldaos -ldfs
   ENGINES += dfs
 endif
+
 SOURCE += oslib/asprintf.c
 ifndef CONFIG_STRSEP
   SOURCE += oslib/strsep.c
