@@ -140,9 +140,9 @@ static enum fio_q_status fio_pfs_queue(struct thread_data *td,
     else if (io_u->ddir == DDIR_WRITE)
         ret = pfsd_pwrite(f->fd, io_u->xfer_buf, io_u->xfer_buflen, io_u->offset);
     else if (io_u->ddir == DDIR_TRIM)
-	return FIO_Q_COMPLETED;
+	    return FIO_Q_COMPLETED;
     else
-	ret = 0;
+	    ret = 0;
 
     return fio_io_end(td, io_u, ret);
 }
