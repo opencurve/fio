@@ -139,10 +139,10 @@ static enum fio_q_status fio_pfs_queue(struct thread_data *td,
         ret = pfsd_pread(f->fd, io_u->xfer_buf, io_u->xfer_buflen, io_u->offset);
     else if (io_u->ddir == DDIR_WRITE)
         ret = pfsd_pwrite(f->fd, io_u->xfer_buf, io_u->xfer_buflen, io_u->offset);
-    else {
-        log_err("pfs: trim is not supported");
-        return FIO_Q_COMPLETED;
-    }
+    else if (io_u->ddir == DDIR_TRIM)
+	return FIO_Q_COMPLETED;
+    else
+	ret = 0;
 
     return fio_io_end(td, io_u, ret);
 }
@@ -159,8 +159,6 @@ static void fio_pfs_cleanup(struct thread_data *td)
 static int fio_pfs_open_file(struct thread_data *td, struct fio_file *f)
 {
     int flags = 0;
-
-    dprint(FD_FILE, "fd open %s\n", f->file_name);
 
     if (td->o.create_on_open && td->o.allow_create)
         flags |= O_CREAT;
@@ -196,8 +194,6 @@ static int fio_pfs_open_file(struct thread_data *td, struct fio_file *f)
 static int fio_pfs_close_file(struct thread_data fio_unused *td, struct fio_file *f)
 {
     int ret = 0;
-
-    dprint(FD_FILE, "fd close %s\n", f->file_name);
 
     if (pfsd_close(f->fd) < 0)
         ret = errno;
