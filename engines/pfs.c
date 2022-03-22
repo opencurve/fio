@@ -74,6 +74,8 @@ struct pfs_data {
 
 static struct pfs_data pfs_data;
 
+static int fio_pfs_file_size(struct thread_data *td, struct fio_file *f);
+
 static int fio_pfs_connect(struct thread_data *td)
 {
     struct pfs_options *o = td->eo;
@@ -91,7 +93,6 @@ static int fio_pfs_connect(struct thread_data *td)
     }
     pfs_data.pfs_mounted = 1;
     strcpy(pfs_data.pbd, o->pbd);
-    td->o.use_thread = 1;
     pthread_mutex_unlock(&pfs_mount_lock);
     return 0;
 }
@@ -107,10 +108,7 @@ static void fio_pfs_disconnect(void)
 
 static int fio_io_end(struct thread_data *td, struct io_u *io_u, int ret)
 {
-    if (io_u->file && ret >= 0 && ddir_rw(io_u->ddir))
-        LAST_POS(io_u->file) = io_u->offset + ret;
-
-    if (ret != (int) io_u->xfer_buflen) {
+    if (ret != (ssize_t) io_u->xfer_buflen) {
         if (ret >= 0) {
             io_u->resid = io_u->xfer_buflen - ret;
             io_u->error = 0;
@@ -139,12 +137,20 @@ static enum fio_q_status fio_pfs_queue(struct thread_data *td,
         ret = pfsd_pread(f->fd, io_u->xfer_buf, io_u->xfer_buflen, io_u->offset);
     else if (io_u->ddir == DDIR_WRITE)
         ret = pfsd_pwrite(f->fd, io_u->xfer_buf, io_u->xfer_buflen, io_u->offset);
-    else if (io_u->ddir == DDIR_TRIM)
-	    return FIO_Q_COMPLETED;
-    else
-	    ret = 0;
+    else if (io_u->ddir == DDIR_SYNC)
+        ret = pfsd_fsync(f->fd);
+    else {
+        ret = io_u->xfer_buflen;
+        io_u->error = EINVAL;
+    }
 
     return fio_io_end(td, io_u, ret);
+}
+
+static int fio_pfs_setup(struct thread_data *td)
+{
+    td->o.use_thread = 1;
+    return 0;
 }
 
 static int fio_pfs_init(struct thread_data *td)
@@ -159,6 +165,8 @@ static void fio_pfs_cleanup(struct thread_data *td)
 static int fio_pfs_open_file(struct thread_data *td, struct fio_file *f)
 {
     int flags = 0;
+    int ret;
+	uint64_t desired_fs;
 
     if (td->o.create_on_open && td->o.allow_create)
         flags |= O_CREAT;
@@ -168,14 +176,26 @@ static int fio_pfs_open_file(struct thread_data *td, struct fio_file *f)
         return 1;
     }
 
+    if (td->o.oatomic) {
+        td_verror(td, EINVAL, "pfs does not support atomic IO");
+        return 1;
+    }
+
+    if (td->o.create_on_open && td->o.allow_create)
+        flags |= O_CREAT;
+
     if (td_write(td)) {
         if (!read_only)
             flags |= O_RDWR;
 
-        if (f->filetype == FIO_TYPE_FILE && td->o.allow_create)
+        if (td->o.allow_create)
             flags |= O_CREAT;
     } else if (td_read(td)) {
         flags |= O_RDONLY;
+    } else {
+        /* We should never go here. */
+        td_verror(td, EINVAL, "Unsopported open mode");
+        return 1;
     }
 
     f->fd = pfsd_open(f->file_name, flags, 0600);
@@ -183,10 +203,42 @@ static int fio_pfs_open_file(struct thread_data *td, struct fio_file *f)
         char buf[FIO_VERROR_SIZE];
         int __e = errno;
 
-        snprintf(buf, sizeof(buf), "open(%s)", f->file_name);
+        snprintf(buf, sizeof(buf), "pfsd_open(%s)", f->file_name);
         td_verror(td, __e, buf);
         return 1;
     }
+
+    /* Now we need to make sure the real file size is sufficient for FIO
+       to do its things. This is normally done before the file open function
+       is called, but because FIO would use POSIX calls, we need to do it
+       ourselves */
+    ret = fio_pfs_file_size(td, f);
+    if (ret) {
+        pfsd_close(f->fd);
+        td_verror(td, errno, "fio_pfs_file_size");
+        return 1;
+    }
+
+    desired_fs = f->io_size + f->file_offset;
+    if (td_write(td)) {
+        dprint(FD_FILE, "Laying out file %s\n", f->file_name);
+        if (!td->o.create_on_open &&
+                f->real_file_size < desired_fs &&
+                pfsd_ftruncate(f->fd, desired_fs) < 0) {
+            pfsd_close(f->fd);
+            td_verror(td, errno, "pfsd_ftruncate");
+            return 1;
+        }
+        if (f->real_file_size < desired_fs)
+            f->real_file_size = desired_fs;
+    } else if (td_read(td) && f->real_file_size < desired_fs) {
+        pfsd_close(f->fd);
+        log_err("error: can't read %lu bytes from file with "
+                        "%lu bytes\n", desired_fs, f->real_file_size);
+        return 1;
+    }
+
+    f->filetype = FIO_TYPE_FILE;
 
     return 0;
 }
@@ -199,9 +251,20 @@ static int fio_pfs_close_file(struct thread_data fio_unused *td, struct fio_file
         ret = errno;
 
     f->fd = -1;
-
-    f->engine_pos = 0;
     return ret;
+}
+
+static int fio_pfs_invalidate_cache(struct thread_data *td, struct fio_file *f)
+{
+    return 0;
+}
+
+static int fio_pfs_unlink_file(struct thread_data *td, struct fio_file *f)
+{
+    int ret;
+
+    ret = pfsd_unlink(f->file_name);
+    return ret < 0 ? errno : 0;
 }
 
 static int fio_pfs_file_size(struct thread_data *td, struct fio_file *f)
@@ -212,7 +275,7 @@ static int fio_pfs_file_size(struct thread_data *td, struct fio_file *f)
         return 1;
 
     if (pfsd_stat(f->file_name, &st) == -1) {
-        td_verror(td, errno, "fstat");
+        td_verror(td, errno, "pfsd_stat");
         return 1;
     }
 
@@ -223,13 +286,16 @@ static int fio_pfs_file_size(struct thread_data *td, struct fio_file *f)
 static struct ioengine_ops ioengine_prw = {
     .name       = "pfs",
     .version    = FIO_IOOPS_VERSION,
+    .setup      = fio_pfs_setup,
     .init       = fio_pfs_init,
     .cleanup    = fio_pfs_cleanup,
     .queue      = fio_pfs_queue,
     .open_file  = fio_pfs_open_file,
     .close_file = fio_pfs_close_file,
+    .invalidate = fio_pfs_invalidate_cache,
     .get_file_size  = fio_pfs_file_size,
-    .flags      = FIO_DISKLESSIO | FIO_SYNCIO,
+    .unlink_file = fio_pfs_unlink_file,
+    .flags      = FIO_SYNCIO|FIO_NOFILEHASH|FIO_DISKLESSIO|FIO_NODISKUTIL,
     .options    = options,
     .option_struct_size = sizeof(struct pfs_options),
 };
