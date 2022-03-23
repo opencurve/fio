@@ -82,7 +82,6 @@ filename=/pool@@pfs_test_/fio-write #此处改成你的nebd卷名后跟文件名
 size=10G
 bs=16K
 direct=1
-create_on_open=1
 time_based
 ```
 
