@@ -603,6 +603,7 @@ FIO_STATIC struct ioengine_ops ioengine = {
 	.options		= options,
 	.io_u_init		= fio_nebd_io_u_init,
 	.io_u_free		= fio_nebd_io_u_free,
+	.flags			= FIO_NOFILEHASH|FIO_DISKLESSIO|FIO_NODISKUTIL,
 	.option_struct_size	= sizeof(struct nebd_options),
 };
 
