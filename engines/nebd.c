@@ -23,9 +23,8 @@
 struct fio_nebd_iou {
 	struct NebdClientAioContext io_ctx;
 	struct io_u *io_u;
-	int io_seen;
-	int io_complete;
-	sem_t io_sem;
+	TAILQ_ENTRY(fio_nebd_iou) link;
+	struct nebd_data *nebd;
 };
 
 struct nebd_global {
@@ -41,8 +40,11 @@ struct nebd_stat {
 
 struct nebd_data {
 	struct io_u **aio_events;
-	struct io_u **sort_events;
 	struct nebd_stat *st;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+	TAILQ_HEAD(, fio_nebd_iou) completed;
+	int inflight;
 };
 
 struct nebd_options {
@@ -142,6 +144,7 @@ static int _fio_setup_nebd_data(struct thread_data *td,
 			        struct nebd_data **nebd_data_ptr)
 {
 	struct nebd_data *nebd;
+	pthread_mutexattr_t attr;
 	//struct nebd_options *o = td->eo;
 
 	if (td->io_ops_data)
@@ -155,17 +158,19 @@ static int _fio_setup_nebd_data(struct thread_data *td,
 	if (!nebd->aio_events)
 		goto failed;
 
-	nebd->sort_events = calloc(td->o.iodepth, sizeof(struct io_u *));
-	if (!nebd->sort_events)
-		goto failed;
-
+	TAILQ_INIT(&nebd->completed);
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&nebd->mutex, &attr);
+	pthread_mutexattr_destroy(&attr);
+	pthread_cond_init(&nebd->cond, NULL);
+	nebd->inflight = 0;
 	*nebd_data_ptr = nebd;
 	return 0;
 
 failed:
 	if (nebd) {
 		free(nebd->aio_events);
-		free(nebd->sort_events);
 		free(nebd);
 	}
 	return 1;
@@ -241,6 +246,7 @@ static void _fio_nebd_disconnect(struct nebd_data *nebd)
 static void _fio_nebd_finish_aiocb(struct NebdClientAioContext* context)
 {
 	struct fio_nebd_iou *fni = (struct fio_nebd_iou *)context;
+	struct nebd_data *nebd = fni->nebd;
 	struct io_u *io_u = fni->io_u;
 	ssize_t ret;
 
@@ -256,8 +262,11 @@ static void _fio_nebd_finish_aiocb(struct NebdClientAioContext* context)
 	} else
 		io_u->error = 0;
 
-	fni->io_complete = 1;
-	sem_post(&fni->io_sem);
+	pthread_mutex_lock(&nebd->mutex);
+	TAILQ_INSERT_TAIL(&nebd->completed, fni, link);
+	nebd->inflight--;
+	pthread_cond_broadcast(&nebd->cond);
+	pthread_mutex_unlock(&nebd->mutex);
 }
 
 static struct io_u *fio_nebd_event(struct thread_data *td, int event)
@@ -267,106 +276,35 @@ static struct io_u *fio_nebd_event(struct thread_data *td, int event)
 	return nebd->aio_events[event];
 }
 
-static inline int fni_check_complete(struct nebd_data *nebd, struct io_u *io_u,
-				     unsigned int *events)
-{
-	struct fio_nebd_iou *fni = io_u->engine_data;
-
-	if (fni->io_complete) {
-		fni->io_seen = 1;
-		nebd->aio_events[*events] = io_u;
-		(*events)++;
-		return 1;
-	}
-
-	return 0;
-}
-
-static inline int nebd_io_u_seen(struct io_u *io_u)
-{
-	struct fio_nebd_iou *fni = io_u->engine_data;
-
-	return fni->io_seen;
-}
-
-static void nebd_io_u_wait_complete(struct io_u *io_u)
-{
-	struct fio_nebd_iou *fni = io_u->engine_data;
-
-	while (sem_wait(&fni->io_sem) == -1 && errno == EAGAIN) {
-	}
-}
-
-static int nebd_io_u_cmp(const void *p1, const void *p2)
-{
-	const struct io_u **a = (const struct io_u **) p1;
-	const struct io_u **b = (const struct io_u **) p2;
-	uint64_t at, bt;
-
-	at = utime_since_now(&(*a)->start_time);
-	bt = utime_since_now(&(*b)->start_time);
-
-	if (at < bt)
-		return -1;
-	else if (at == bt)
-		return 0;
-	else
-		return 1;
-}
-
 static int nebd_iter_events(struct thread_data *td, unsigned int *events,
 			   unsigned int min_evts, int wait)
 {
 	struct nebd_data *nebd = td->io_ops_data;
+	TAILQ_HEAD(, fio_nebd_iou) list = TAILQ_HEAD_INITIALIZER(list);
 	unsigned int this_events = 0;
-	struct io_u *io_u;
-	int i, sidx = 0;
+	int inflight = 0;
 
-	io_u_qiter(&td->io_u_all, io_u, i) {
-		if (!(io_u->flags & IO_U_F_FLIGHT))
-			continue;
-		if (nebd_io_u_seen(io_u))
-			continue;
+	pthread_mutex_lock(&nebd->mutex);
+again:
+	TAILQ_CONCAT(&list, &nebd->completed, link);
+	inflight = nebd->inflight;
+	pthread_mutex_unlock(&nebd->mutex);
 
-		if (fni_check_complete(nebd, io_u, events))
-			this_events++;
-		else if (wait)
-			nebd->sort_events[sidx++] = io_u;
+	while (!TAILQ_EMPTY(&list)) {
+		struct fio_nebd_iou *fni = TAILQ_FIRST(&list);
+		nebd->aio_events[*events] = fni->io_u;
+		(*events)++;
+		this_events++;
+		TAILQ_REMOVE(&list, fni, link);
 	}
 
-	if (!wait || !sidx)
+	if (!wait || !inflight || *events >= min_evts)
 		return this_events;
 
-	/*
-	 * Sort events, oldest issue first, then wait on as many as we
-	 * need in order of age. If we have enough events, stop waiting,
-	 * and just check if any of the older ones are done.
-	 */
-	if (sidx > 1)
-		qsort(nebd->sort_events, sidx, sizeof(struct io_u *), nebd_io_u_cmp);
-
-	for (i = 0; i < sidx; i++) {
-		io_u = nebd->sort_events[i];
-
-		if (fni_check_complete(nebd, io_u, events)) {
-			this_events++;
-			continue;
-		}
-
-		/*
-		 * Stop waiting when we have enough, but continue checking
-		 * all pending IOs if they are complete.
-		 */
-		if (*events >= min_evts)
-			continue;
-
-		nebd_io_u_wait_complete(io_u);
-
-		if (fni_check_complete(nebd, io_u, events))
-			this_events++;
-	}
-
-	return this_events;
+	pthread_mutex_lock(&nebd->mutex);
+	while (TAILQ_EMPTY(&nebd->completed) && nebd->inflight)
+		pthread_cond_wait(&nebd->cond, &nebd->mutex);
+	goto again;
 }
 
 static int fio_nebd_getevents(struct thread_data *td, unsigned int min,
@@ -403,9 +341,10 @@ static enum fio_q_status fio_nebd_queue(struct thread_data *td,
 
 	fio_ro_check(td, io_u);
 
-	fni->io_seen = 0;
-	fni->io_complete = 0;
-	sem_init(&fni->io_sem, 0, 0);
+	pthread_mutex_lock(&nebd->mutex);
+	nebd->inflight++;
+	pthread_mutex_unlock(&nebd->mutex);
+	fni->nebd = nebd;
 
 	fni->io_ctx.offset = io_u->offset;
 	fni->io_ctx.length = io_u->xfer_buflen;
@@ -453,6 +392,11 @@ static enum fio_q_status fio_nebd_queue(struct thread_data *td,
 failed_comp:
 	io_u->error = -EIO;
 	td_verror(td, io_u->error, "xfer");
+	pthread_mutex_lock(&nebd->mutex);
+	nebd->inflight--;
+	pthread_cond_broadcast(&nebd->cond);
+	pthread_mutex_unlock(&nebd->mutex);
+
 	return FIO_Q_COMPLETED;
 }
 
@@ -482,8 +426,9 @@ static void fio_nebd_cleanup(struct thread_data *td)
 
 	if (nebd) {
 		_fio_nebd_disconnect(nebd);
+		pthread_mutex_destroy(&nebd->mutex);
+		pthread_cond_destroy(&nebd->cond);
 		free(nebd->aio_events);
-		free(nebd->sort_events);
 		free(nebd);
 	}
 }
@@ -573,7 +518,6 @@ static void fio_nebd_io_u_free(struct thread_data *td, struct io_u *io_u)
 
 	if (fni) {
 		io_u->engine_data = NULL;
-		sem_destroy(&fni->io_sem);
 		free(fni);
 	}
 }
@@ -585,7 +529,6 @@ static int fio_nebd_io_u_init(struct thread_data *td, struct io_u *io_u)
 	fni = calloc(1, sizeof(*fni));
 	fni->io_u = io_u;
 	io_u->engine_data = fni;
-	sem_init(&fni->io_sem, 0, 0);
 	return 0;
 }
 
