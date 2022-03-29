@@ -144,7 +144,6 @@ static int _fio_setup_nebd_data(struct thread_data *td,
 			        struct nebd_data **nebd_data_ptr)
 {
 	struct nebd_data *nebd;
-	pthread_mutexattr_t attr;
 	//struct nebd_options *o = td->eo;
 
 	if (td->io_ops_data)
@@ -159,10 +158,7 @@ static int _fio_setup_nebd_data(struct thread_data *td,
 		goto failed;
 
 	TAILQ_INIT(&nebd->completed);
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-	pthread_mutex_init(&nebd->mutex, &attr);
-	pthread_mutexattr_destroy(&attr);
+	pthread_mutex_init(&nebd->mutex, NULL);
 	pthread_cond_init(&nebd->cond, NULL);
 	nebd->inflight = 0;
 	*nebd_data_ptr = nebd;
