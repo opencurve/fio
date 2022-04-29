@@ -2029,6 +2029,9 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 			  { .ival = "nebd",
 			    .help = "nebd IO engine",
 			  },
+			  { .ival = "cbd",
+			    .help = "cbd IO engine",
+			  },
 		},
 	},
 	{

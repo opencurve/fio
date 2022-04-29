@@ -8,12 +8,13 @@
 make
 ```
 
-configure时确保PFS和NEBD都是yes
+configure时确保PFS和NEBD/CBD都是yes
 
 ![image](examples/config-curve.png)
 
 ## 2. 测试curve卷
-### 2.1 配置fio
+### 2.1 使用nebd引擎测试curve卷
+#### 2.1.1 配置fio
 
 创建配置文件 nebd_global.fio, 包含如下内容
 ```
@@ -49,13 +50,58 @@ numjobs=10
 runtime=900
 ```
 
-### 2.2 测试
+#### 2.1.2 测试
 
 顺序写测试:
 sudo ./fio ./nebd_seqw.fio
 
 随机写测试:
 sudo ./fio ./nebd_randw.fio
+
+### 2.2 使用cbd引擎测试curve卷
+#### 2.2.1 配置fio
+
+创建配置文件 cbd_global.fio, 包含如下内容
+```
+ioengine=cbd
+nebd=cbd:pool//pfs_test_  #此处可修改成你的卷名
+size=10G
+bs=16K
+direct=1
+time_based
+```
+
+创建配置文件 cbd_seqw.fio, 该文件用于做顺序写测试，包含如下内容
+```
+[global]
+include cbd_global.fio
+
+[seqwrite]
+rw=write
+iodepth=1
+numjobs=1
+runtime=900
+```
+
+创建配置文件 cbd_randw.fio，该文件用于做随机写测试，包含如下内容
+```
+[global]
+include  cbd_global.fio
+
+[randwrite]
+rw=randwrite
+iodepth=16
+numjobs=10
+runtime=900
+```
+
+#### 2.2.2 测试
+
+顺序写测试:
+sudo ./fio ./cbd_seqw.fio
+
+随机写测试:
+sudo ./fio ./cbd_randw.fio
 
 ## 3. 测试pfs
 ### 3.1 启动pfs守护进程

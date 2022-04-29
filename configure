@@ -214,6 +214,8 @@ for opt do
   ;;
   --disable-nebd) disable_nebd="yes"
   ;;
+  --disable-cbd) disable_cbd="yes"
+  ;;
   --disable-http) disable_http="yes"
   ;;
   --disable-gfapi) disable_gfapi="yes"
@@ -279,6 +281,7 @@ if test "$show_help" = "yes" ; then
   echo "--disable-rbd           Disable Rados Block Device even if found"
   echo "--disable-pfs           Disable PolarFS even if found"
   echo "--disable-nebd          Disable Curve NEBD even if found"
+  echo "--disable-cbd           Disable Curve Block Device even if found"
   echo "--disable-http          Disable HTTP support even if found"
   echo "--disable-nfs           Disable userspace NFS support even if found"
   echo "--disable-gfapi         Disable gfapi"
@@ -1996,6 +1999,53 @@ if test "$disable_nebd" != "yes"  && compile_prog "$libnebd_cflags" "$libnebd_ld
 fi
 print_config "NEBD engine" "$nebd"
 
+##########################################
+# check for cbd
+if test "$cbd" != "yes" ; then
+  cbd="no"
+fi
+cat > $TMPC << EOF
+#include <libcbd.h>
+
+static struct CurveOptions cbd_global;
+
+int main(int argc, char **argv)
+{
+  cbd_libcurve_init(&cbd_global);
+  return 0;
+}
+EOF
+libcbd_cflags=""
+libcbd_ldflags="-L/usr/lib -Wl,-rpath=/usr/lib"
+libcbd_libs="-lbrpc \
+-lbthread \
+-lbutil \
+-lbvar \
+-lcbd \
+-lcc_brpc_idl_options_proto \
+-lcc_brpc_internal_proto \
+-lchunkserver-protos \
+-lcommon_proto \
+-lcurve_auth \
+-lcurve_client \
+-lcurve_common \
+-lcurve_concurrent \
+-lcurve \
+-lgflags \
+-lglog \
+-lleveldb \
+-lmcpack2pb \
+-lnameserver2_proto \
+-lprotobuf_lite \
+-lprotobuf \
+-lprotoc_lib \
+-ltopology_proto \
+-ljson2pb" \
+
+if test "$disable_cbd" != "yes"  && compile_prog "$libcbd_cflags" "$libcbd_ldflags $libcbd_libs" ; then
+  cbd="yes"
+fi
+print_config "cbd engine" "$cbd"
 
 ##########################################
 # Check whether we have setvbuf
@@ -3244,6 +3294,12 @@ if test "$nebd" = yes; then
   echo "LIBNEBD_CFLAGS=$libnebd_cflags" >> $config_host_mak
   echo "LIBNEBD_LDLAGS=$libnebd_ldflags" >> $config_host_mak
   echo "LIBNEBD_LIBS=$libnebd_libs" >> $config_host_mak
+fi
+if test "$cbd" = yes; then
+  output_sym "CONFIG_CBD"
+  echo "LIBCBD_CFLAGS=$libcbd_cflags" >> $config_host_mak
+  echo "LIBCBD_LDLAGS=$libcbd_ldflags" >> $config_host_mak
+  echo "LIBCBD_LIBS=$libcbd_libs" >> $config_host_mak
 fi
 
 print_config "Lib-based ioengines dynamic" "$dynamic_engines"
