@@ -73,6 +73,7 @@ enum opt_category_group {
 	__FIO_OPT_G_NFS,
 	__FIO_OPT_G_PFS,
 	__FIO_OPT_G_NEBD,
+	__FIO_OPT_G_CBD,
 
 	FIO_OPT_G_RATE		= (1ULL << __FIO_OPT_G_RATE),
 	FIO_OPT_G_ZONE		= (1ULL << __FIO_OPT_G_ZONE),
@@ -120,6 +121,7 @@ enum opt_category_group {
 	FIO_OPT_G_DFS		= (1ULL << __FIO_OPT_G_DFS),
 	FIO_OPT_G_PFS		= (1ULL << __FIO_OPT_G_PFS),
 	FIO_OPT_G_NEBD		= (1ULL << __FIO_OPT_G_NEBD),
+	FIO_OPT_G_CBD		= (1ULL << __FIO_OPT_G_CBD),
 };
 
 extern const struct opt_group *opt_group_from_mask(uint64_t *mask);

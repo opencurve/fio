@@ -434,7 +434,7 @@ static int fio_nebd_setup(struct thread_data *td)
 	struct fio_file *f;
 	struct nebd_data *nebd = NULL;
 	int r;
-	size_t size;
+    int64_t size;
 
 	/* allocate engine specific structure to deal with libnebdclient. */
 	r = _fio_setup_nebd_data(td, &nebd);

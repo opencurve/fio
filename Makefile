@@ -165,7 +165,12 @@ ifdef CONFIG_NEBD
   nebd_LIBS = ${LIBNEBD_LDLAGS} ${LIBNEBD_LIBS}
   ENGINES += nebd
 endif
-
+ifdef CONFIG_CBD
+  cbd_SRCS = engines/cbd.c
+  cbd_CFLAGS = ${LIBCBD_CFLAGS}
+  cbd_LIBS = ${LIBCBD_LDLAGS} ${LIBCBD_LIBS}
+  ENGINES += cbd
+endif
 ifdef CONFIG_HTTP
   http_SRCS = engines/http.c
   http_LIBS = -lcurl -lssl -lcrypto
