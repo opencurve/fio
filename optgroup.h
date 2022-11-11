@@ -72,6 +72,7 @@ enum opt_category_group {
 	__FIO_OPT_G_DFS,
 	__FIO_OPT_G_NFS,
 	__FIO_OPT_G_PFS,
+	__FIO_OPT_G_PFS_SPDK,
 	__FIO_OPT_G_NEBD,
 	__FIO_OPT_G_CBD,
 
@@ -120,6 +121,7 @@ enum opt_category_group {
 	FIO_OPT_G_LIBCUFILE	= (1ULL << __FIO_OPT_G_LIBCUFILE),
 	FIO_OPT_G_DFS		= (1ULL << __FIO_OPT_G_DFS),
 	FIO_OPT_G_PFS		= (1ULL << __FIO_OPT_G_PFS),
+	FIO_OPT_G_PFS_SPDK		= (1ULL << __FIO_OPT_G_PFS_SPDK),
 	FIO_OPT_G_NEBD		= (1ULL << __FIO_OPT_G_NEBD),
 	FIO_OPT_G_CBD		= (1ULL << __FIO_OPT_G_CBD),
 };

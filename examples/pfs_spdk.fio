@@ -1,0 +1,17 @@
+[global]
+ioengine=pfs_spdk
+cluster=spdk
+pbd=0000:db:00.0n1
+filename=/0000\:db\:00.0n1/test1
+spdk_nvme_controller=0000:db:00.0
+spdk_env_context=--in-memory
+size=10G
+bs=4K
+direct=1
+time_based
+
+[randwrite]
+rw=randwrite
+iodepth=1
+numjobs=1
+runtime=120
