@@ -212,6 +212,8 @@ for opt do
   ;;
   --disable-pfs) disable_pfs="yes"
   ;;
+  --disable-pfs-spdk) disable_pfs_spdk="yes"
+  ;;
   --disable-nebd) disable_nebd="yes"
   ;;
   --disable-cbd) disable_cbd="yes"
@@ -280,6 +282,7 @@ if test "$show_help" = "yes" ; then
   echo "--disable-rados         Disable Rados support even if found"
   echo "--disable-rbd           Disable Rados Block Device even if found"
   echo "--disable-pfs           Disable PolarFS even if found"
+  echo "--disable-pfs-spdk      Disable PolarFS for spdk even if found"
   echo "--disable-nebd          Disable Curve NEBD even if found"
   echo "--disable-cbd           Disable Curve Block Device even if found"
   echo "--disable-http          Disable HTTP support even if found"
@@ -1976,6 +1979,108 @@ fi
 print_config "PFS engine" "$pfs"
 
 ##########################################
+# check for pfs
+if test "$pfs_spdk" != "yes" ; then
+  pfs_spdk="no"
+fi
+cat > $TMPC << EOF
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/uio.h>
+#include <unistd.h>
+#include <pfs_api.h>
+
+int main(int argc, char **argv)
+{
+  pfs_mount_acquire("spdk", "0000:c2:00.0n1", 2, PFS_RDWR|MNTFLG_PFSD_INTERNAL);
+
+  return 0;
+}
+EOF
+dpdk_path="/usr/local/dpdk"
+spdk_path="/usr/local/spdk"
+pfs_spdk_path="/usr/local/curvestore/pfsd"
+libpfs_spdk_cflags="-I$dpdk_path/include -I$spdk_path/include -I$pfs_spdk_path/include"
+libpfs_spdk_ldflags="-L$dpdk_path/lib -L$spdk_path/lib -L$pfs_spdk_path/lib -Wl,-rpath=$pfs_spdk_path/lib"
+libpfs_spdk_libs="-Wl,--whole-archive \
+-lpfs \
+-lpfsd_svr \
+-Wl,--no-whole-archive \
+-Wl,-rpath=$spdk_path/lib \
+-Wl,-rpath=$dpdk_path/lib \
+-Wl,--disable-new-dtags \
+-Wl,--push-state \
+-Wl,--no-as-needed \
+-Wl,--whole-archive \
+-Wl,--start-group \
+-Bstatic \
+-lspdk_bdev_null \
+-lspdk_bdev_nvme \
+-lspdk_nvme \
+-lspdk_env_dpdk \
+-lspdk_sock_posix \
+-lspdk_event \
+-lspdk_event_bdev \
+-lspdk_bdev \
+-lspdk_notify \
+-lspdk_dma \
+-lspdk_event_accel \
+-lspdk_accel \
+-lspdk_event_vmd \
+-lspdk_vmd \
+-lspdk_event_sock \
+-lspdk_init \
+-lspdk_thread \
+-lspdk_trace \
+-lspdk_sock \
+-lspdk_rpc \
+-lspdk_jsonrpc \
+-lspdk_json \
+-lspdk_util \
+-lspdk_log \
+-Wl,--end-group \
+-Wl,--no-whole-archive \
+-Wl,--whole-archive \
+-Wl,--no-as-needed \
+-Wl,--start-group \
+-lrte_bus_pci \
+-lrte_cryptodev \
+-lrte_dmadev \
+-lrte_eal \
+-lrte_ethdev \
+-lrte_hash \
+-lrte_kvargs \
+-lrte_mbuf \
+-lrte_mempool \
+-lrte_mempool_ring \
+-lrte_net \
+-lrte_pci \
+-lrte_power \
+-lrte_rcu \
+-lrte_ring \
+-lrte_telemetry \
+-lrte_vhost \
+-lrte_meter \
+-lrte_timer \
+-lrte_stack \
+-Wl,--end-group \
+-Wl,--no-whole-archive \
+-Wl,--pop-state \
+-luuid \
+-lnuma \
+-lcrypto \
+-lbsd \
+-lm \
+-laio \
+-ldl \
+-lstdc++"
+
+if test "$disable_pfs_spdk" != "yes"  && compile_prog "$libpfs_spdk_cflags" "$libpfs_spdk_ldflags $libpfs_spdk_libs" ; then
+  pfs_spdk="yes"
+fi
+print_config "PFS SPDK engine" "$pfs_spdk"
+
+##########################################
 # check for nebd
 if test "$nebd" != "yes" ; then
   nebd="no"
@@ -3288,6 +3393,12 @@ if test "$pfs" = yes; then
   echo "LIBPFS_CFLAGS=$libpfs_cflags" >> $config_host_mak
   echo "LIBPFS_LDLAGS=$libpfs_ldflags" >> $config_host_mak
   echo "LIBPFS_LIBS=$libpfs_libs" >> $config_host_mak
+fi
+if test "$pfs_spdk" = yes; then
+  output_sym "CONFIG_PFS_SPDK"
+  echo "LIBPFS_SPDK_CFLAGS=$libpfs_spdk_cflags" >> $config_host_mak
+  echo "LIBPFS_SPDK_LDLAGS=$libpfs_spdk_ldflags" >> $config_host_mak
+  echo "LIBPFS_SPDK_LIBS=$libpfs_spdk_libs" >> $config_host_mak
 fi
 if test "$nebd" = yes; then
   output_sym "CONFIG_NEBD"

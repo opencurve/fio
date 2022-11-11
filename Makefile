@@ -159,6 +159,12 @@ ifdef CONFIG_PFS
   pfs_LIBS= $(LIBPFS_LDLAGS) ${LIBPFS_LIBS}
   ENGINES += pfs
 endif
+ifdef CONFIG_PFS_SPDK
+  pfs_spdk_SRCS = engines/pfs_spdk.c
+  pfs_spdk_CFLAGS = ${LIBPFS_SPDK_CFLAGS}
+  pfs_spdk_LIBS= $(LIBPFS_SPDK_LDLAGS) ${LIBPFS_SPDK_LIBS}
+  ENGINES += pfs_spdk
+endif
 ifdef CONFIG_NEBD
   nebd_SRCS = engines/nebd.c
   nebd_CFLAGS = ${LIBNEBD_CFLAGS}
