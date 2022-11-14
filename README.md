@@ -64,7 +64,7 @@ sudo ./fio ./nebd_randw.fio
 创建配置文件 cbd_global.fio, 包含如下内容
 ```
 ioengine=cbd
-nebd=/volpath_owner_  #格式为卷路径(/volpath) + _ + 用户(owner) + _
+cbd=/volpath_owner_  #格式为卷路径(/volpath) + _ + 用户(owner) + _
 size=10G
 bs=16K
 direct=1
