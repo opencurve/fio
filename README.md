@@ -19,7 +19,7 @@ configure时确保PFS和NEBD/CBD都是yes
 创建配置文件 nebd_global.fio, 包含如下内容
 ```
 ioengine=nebd
-nebd=cbd:pool//pfs_test_  #此处可修改成你的卷名
+nebd=cbd:pool//volpath_owner_  #格式为前缀(cbd:pool/) + 卷路径(/volpath) + _ + 用户(owner) + _
 size=10G
 bs=16K
 direct=1
@@ -64,7 +64,7 @@ sudo ./fio ./nebd_randw.fio
 创建配置文件 cbd_global.fio, 包含如下内容
 ```
 ioengine=cbd
-nebd=cbd:pool//pfs_test_  #此处可修改成你的卷名
+nebd=/volpath_owner_  #格式为卷路径(/volpath) + _ + 用户(owner) + _
 size=10G
 bs=16K
 direct=1
@@ -124,7 +124,7 @@ sudo pfs -C curve -H 1 mkfs pool@@pfs_test_
 ioengine=pfs
 cluster=curve
 pbd=pool@@pfs_test_
-filename=/pool@@pfs_test_/fio-write #此处改成你的nebd卷名后跟文件名fio-write
+filename=/pool@@pfs_test_/fio-write #格式为/ + pbdname(pool@@pfs_test_) + 测试文件路径(/fio-write), 其中pbdname格式为前缀(pool@@) + 卷名(pfs) + _ + 用户名(test) + _
 size=10G
 bs=16K
 direct=1
