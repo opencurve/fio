@@ -2066,6 +2066,7 @@ libpfs_spdk_libs="-Wl,--whole-archive \
 -Wl,--end-group \
 -Wl,--no-whole-archive \
 -Wl,--pop-state \
+-lrt \
 -luuid \
 -lnuma \
 -lcrypto \
@@ -2073,7 +2074,8 @@ libpfs_spdk_libs="-Wl,--whole-archive \
 -lm \
 -laio \
 -ldl \
--lstdc++"
+-lstdc++ \
+-lpthread"
 
 if test "$disable_pfs_spdk" != "yes"  && compile_prog "$libpfs_spdk_cflags" "$libpfs_spdk_ldflags $libpfs_spdk_libs" ; then
   pfs_spdk="yes"
