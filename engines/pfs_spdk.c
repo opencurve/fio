@@ -244,10 +244,13 @@ static int fio_pfs_init(struct thread_data *td)
 
 static void fio_pfs_cleanup(struct thread_data *td)
 {
-    int ret = pfsd_stop();
+/*
+    int ret;
+    ret = pfsd_stop();
     if (ret) {
         log_err("pfsd_stop fail, ret: %d\n", ret);
     }
+*/
 }
 
 static int fio_pfs_open_file(struct thread_data *td, struct fio_file *f)
@@ -395,6 +398,13 @@ static void fio_init fio_pfs_register(void)
 
 static void fio_exit fio_pfs_unregister(void)
 {
+    int ret;
+
     fio_pfs_disconnect();
+    ret = pfsd_stop();
+    if (ret) {
+        log_err("pfsd_stop fail, ret: %d\n", ret);
+    }
+    pfs_spdk_cleanup();
     unregister_ioengine(&ioengine_prw);
 }
