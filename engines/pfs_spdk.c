@@ -168,7 +168,7 @@ static int fio_pfs_connect(struct thread_data *td)
         return 1;
     }
     ret = pfs_mount_acquire(o->cluster, o->pbd, o->hostid,
-        PFS_RDWR|MNTFLG_PFSD_INTERNAL);
+        PFS_RDWR);
     if (ret) {
         pthread_mutex_unlock(&pfs_mount_lock);
         log_err("pfs_mount_acquire fail, ret: %d\n", ret);
@@ -405,6 +405,7 @@ static void fio_exit fio_pfs_unregister(void)
     if (ret) {
         log_err("pfsd_stop fail, ret: %d\n", ret);
     }
+    pfsd_wait_stop();
     pfs_spdk_cleanup();
     unregister_ioengine(&ioengine_prw);
 }
