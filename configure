@@ -2124,7 +2124,8 @@ int main(int argc, char **argv)
 EOF
 libcbd_cflags=""
 libcbd_ldflags="-L/usr/lib -Wl,-rpath=/usr/lib"
-libcbd_libs="-lbrpc \
+libcbd_libs="-lcurve_client \
+-lbrpc \
 -lbthread \
 -lbutil \
 -lbvar \
@@ -2134,7 +2135,6 @@ libcbd_libs="-lbrpc \
 -lchunkserver-protos \
 -lcommon_proto \
 -lcurve_auth \
--lcurve_client \
 -lcurve_common \
 -lcurve_concurrent \
 -lcurve \
