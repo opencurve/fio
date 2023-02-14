@@ -1992,7 +1992,7 @@ cat > $TMPC << EOF
 
 int main(int argc, char **argv)
 {
-  pfs_mount_acquire("spdk", "0000:c2:00.0n1", 2, PFS_RDWR|MNTFLG_PFSD_INTERNAL);
+  pfs_mount_acquire("spdk", "0000:c2:00.0n1", 2, PFS_RDWR);
 
   return 0;
 }
