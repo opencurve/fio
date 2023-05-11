@@ -1,16 +1,34 @@
 # Fio for Curve README
-## 1. 准备
 
-### 1.1 确保curvebs卷已经创建，并且没有被其他用户打开。
+curve fio 是从 [axboe/fio](https://github.com/axboe/fio) 仓库 fork 而来，为 fio 新增了 PFS 和 NEBD/CBD 的 ioengine，用于 curve 的性能测试。
+
+## 1. 编译
+
+### 1.1 编译前准备
+
+curve fio 的编译推荐在 debian 操作系统下编译和运行。在编译 curve fio 前，首先需要安装 PFS 和 NEBD/CBD 的 ioengine 所依赖的动态库和头文件。
+
+#### 1.1.1. CBD ioengine 的编译准备
+CBD ioengine 的编译依赖 curve sdk 的动态库和头文件。因此，在编译curve fio前，需要先编译和安装 curve sdk。 
+
+curve sdk 支持通过tar包的方式手动安装，参考[链接](https://github.com/opencurve/curve/blob/master/docs/cn/curve%E9%80%9A%E8%BF%87tar%E5%8C%85%E6%89%8B%E5%8A%A8%E9%83%A8%E7%BD%B2sdk.md)。此外也可以通过源码的方式编译和打包，在debian操作系统下执行mk-deb.sh脚本生成 curve sdk 的 deb 安装包，然后进行安装。
+
+如果希望在 centos 7 下操作系统下安装和运行 curve fio。在编译 curve fio 前，首先需要：
+1. 升级 GCC 版本要求大于4.9，推荐使用 gcc 7.3.0（经过验证），安装 gcc 7.3.0 版本可以解决后续遇到的 version `GLIBCXX_3.4.21‘ not found 问题。
+2. 升级 openssl 到 1.1.1 版本。
+
+#### 1.1.2. NEBD ioengine 的编译准备
+TODO
+
+#### 1.1.3. PFS ioengine 的编译准备
+TODO
+
 ### 1.2 编译fio
-```    
-./configure
-make
-```
-
-configure时确保PFS和NEBD/CBD都是yes
+执行 ./configure 检查 PFS 和 NEBD/CBD 的 fio ioengine 是否由 no 改为 yes。如果依然是 no，需要重新检查并执行上一步骤。
 
 ![image](examples/config-curve.png)
+
+然后执行 make 编译 curve fio。
 
 ## 2. 测试curve卷
 ### 2.1 使用nebd引擎测试curve卷
